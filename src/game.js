@@ -197,7 +197,8 @@ class TrainingScene extends util.Entity {
     document.getElementById("training-gui").style.display = "block";
     document.getElementById("done-training-1").addEventListener("click", this.onDonePart1.bind(this));
     document.getElementById("done-training-2").addEventListener("click", this.onDonePart2.bind(this));
-    document.getElementById("done-training-4").addEventListener("click", e => {
+    document.getElementById("done-training-4").addEventListener("click", this.onDonePart4.bind(this));
+    document.getElementById("done-training-5").addEventListener("click", e => {
       this.done = true;
 
       sendTrigger("startGame");
@@ -248,7 +249,13 @@ class TrainingScene extends util.Entity {
 
   onAddedShape() {
     document.getElementById("training-3").style.display = "none";
-    document.getElementById("training-4").style.display = "block";
+    // document.getElementById("training-5").style.display = "block";
+    document.getElementById('training-4').style.display = "block";
+  }
+
+  onDonePart4() {
+    document.getElementById('training-4').style.display = "none";
+    document.getElementById('training-5').style.display = "block";
   }
 }
 
