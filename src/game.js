@@ -452,7 +452,12 @@ class BlockScene extends util.Entity {
 
   onKeyUp(e) {
     // If they pressed a number key, add the shape
-    if(!isNaN(parseInt(e.key))) this.onAddShape();
+    if (!isNaN(parseInt(e.key))) {
+      var keyValue = parseInt(e.key);
+      if (keyValue == 1 || keyValue == 2) {
+        this.onAddShape();
+      }
+    }
   }
 
   updateBlocks() {
