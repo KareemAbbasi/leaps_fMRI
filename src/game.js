@@ -251,8 +251,10 @@ class TrainingScene extends util.Entity {
     document.getElementById("training-3").style.display = "none";
     // document.getElementById("training-5").style.display = "block";
     document.getElementById('training-4').style.display = "block";
-    this.blockScene.teardown()
-    this.blockScene.setup()
+    // this.blockScene.teardown()
+    this.blockScene.resetBlocks()
+    this.blockScene.off("addedShape", this.onAddedShape, this);
+
   }
 
   onDonePart4() {
@@ -337,6 +339,30 @@ class BlockScene extends util.Entity {
     const doneAddingButton = document.getElementById("done-adding");
     doneAddingButton.addEventListener("click", this.onAttemptDone);
     doneAddingButton.disabled = !allowEarlyExit;
+  }
+
+  resetBlocks() {
+    this.container.removeChild(this.blocksContainer);
+
+    this.blocksContainer = new PIXI.Container();
+    this.container.addChild(this.blocksContainer);
+    this.blockGrid = [];
+    for(let i = 0; i < 10; i++) {
+      const gridPos = new PIXI.Point(i, 0);
+      this.blockGrid.push(gridPos);
+
+      let rect = makeBlockShape(gridPos);
+
+      rect.buttonMode = true;
+      rect.on("pointerdown", this.onPointerDown.bind(this))
+      rect.on("pointerup", this.onPointerUp.bind(this))
+      rect.on("pointermove", this.onPointerMove.bind(this))
+
+      this.blocksContainer.addChild(rect);
+    }
+
+    this.updateBlocks();
+    
   }
 
   update(timeSinceStart) {
