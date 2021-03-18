@@ -5,13 +5,15 @@ import "../node_modules/url-search-params-polyfill/index.js";
 
 const EPSILON = 0.001;
 const BLOCK_WIDTH = 50;
-const MAX_SEARCH_TIME = 12 * 60 * 1000;
+var MAX_SEARCH_TIME = 12 * 60 * 1000;
 const BLOCK_COLOR = 0x81e700;
 const HIGHLIGHTED_BLOCK_COLOR = 0x59853b;
 const DRAG_HIGHLIGHT_PERIOD = 500;
 const RED_METRICS_HOST = "api.creativeforagingtask.com";
 const RED_METRICS_GAME_VERSION = "b13751f1-637f-411b-8ce2-29b1b24fddf0";
 
+let letsPlayScene = false;
+var inTraining = true;
 
 const TRIGGERS = {
   "loadGame": 100, // When loads starts
@@ -195,14 +197,25 @@ class TrainingScene extends util.Entity {
     this.blockScene.on("addedShape", this.onAddedShape, this);
 
     document.getElementById("training-gui").style.display = "block";
+    document.getElementById("pixi-canvas").addEventListener("keyup", this.onKeyUp.bind(this));
     document.getElementById("done-training-1").addEventListener("click", this.onDonePart1.bind(this));
     document.getElementById("done-training-2").addEventListener("click", this.onDonePart2.bind(this));
     document.getElementById("done-training-4").addEventListener("click", this.onDonePart4.bind(this));
     document.getElementById("done-training-5").addEventListener("click", e => {
-      this.done = true;
-
-      sendTrigger("startGame");
+      letsPlayScene = true;
+      document.getElementById("pixi-canvas").focus();
     });
+    document.getElementById("pixi-canvas").focus();
+
+  }
+
+  finishTraining() {
+    this.done = true;
+    letsPlayScene = false;
+    inTraining = false;
+    galleryShapes = [];
+    sceneStartedAt = Date.now();
+    sendTrigger("startGame");
   }
 
   update(timeSinceStart) {
@@ -225,8 +238,9 @@ class TrainingScene extends util.Entity {
 
     this.didDropBlock = true;
     this.blockScene.highlightMovableBlocks();
-
     document.getElementById("done-training-1").style.display = "block";
+    document.getElementById("pixi-canvas").focus();
+
   }
 
   onDonePart1() {
@@ -235,6 +249,8 @@ class TrainingScene extends util.Entity {
 
     // hide title
     document.getElementById("training-title").style.visibility = "hidden";
+    document.getElementById("pixi-canvas").focus();
+
   }
 
   onDonePart2() {
@@ -255,12 +271,26 @@ class TrainingScene extends util.Entity {
     // this.blockScene.teardown()
     this.blockScene.resetBlocks()
     this.blockScene.off("addedShape", this.onAddedShape, this);
+    document.getElementById("pixi-canvas").focus();
 
   }
 
   onDonePart4() {
     document.getElementById('training-4').style.display = "none";
     document.getElementById('training-5').style.display = "block";
+    document.getElementById("pixi-canvas").focus();
+    // letsPlayScene = true;
+    this.blockScene.removeBlocks();
+  }
+
+  onKeyUp(e) {
+    // If they pressed a number key, add the shape
+    if (!isNaN(parseInt(e.key))) {
+      var keyValue = parseInt(e.key);
+      if (keyValue == 5 && letsPlayScene) {
+        this.finishTraining();
+      }
+    }
   }
 }
 
@@ -278,6 +308,8 @@ class BlockScene extends util.Entity {
     this.preventAddingShape = false;
     this.timesUp = false;
     this.changedShape = true;
+
+    this.mouseOverBlock = null;
 
     this.container = new PIXI.Container();
     sceneLayer.addChild(this.container);
@@ -305,9 +337,20 @@ class BlockScene extends util.Entity {
       let rect = makeBlockShape(gridPos);
 
       rect.buttonMode = true;
-      rect.on("pointerdown", this.onPointerDown.bind(this))
-      rect.on("pointerup", this.onPointerUp.bind(this))
+      if (!buttonControls) {
+        rect.on("pointerdown", this.onPointerDown.bind(this))
+        rect.on("pointerup", this.onPointerUp.bind(this))
+      }
       rect.on("pointermove", this.onPointerMove.bind(this))
+
+      var _self = this;
+      rect.mouseover = function(mouseData) {
+        if (rect.interactive) _self.mouseOverBlock = rect;
+      }
+
+      rect.mouseout = function(mouseData) {
+        _self.mouseOverBlock = null;
+      }
 
       this.blocksContainer.addChild(rect);
     }
@@ -355,9 +398,20 @@ class BlockScene extends util.Entity {
       let rect = makeBlockShape(gridPos);
 
       rect.buttonMode = true;
-      rect.on("pointerdown", this.onPointerDown.bind(this))
-      rect.on("pointerup", this.onPointerUp.bind(this))
+      if (!buttonControls) {
+        rect.on("pointerdown", this.onPointerDown.bind(this))
+        rect.on("pointerup", this.onPointerUp.bind(this))
+      }
       rect.on("pointermove", this.onPointerMove.bind(this))
+
+      var _self = this;
+      rect.mouseover = function(mouseData) {
+        if (rect.interactive) _self.mouseOverBlock = rect;
+      }
+
+      rect.mouseout = function(mouseData) {
+        _self.mouseOverBlock = null;
+      }
 
       this.blocksContainer.addChild(rect);
     }
@@ -366,11 +420,17 @@ class BlockScene extends util.Entity {
     
   }
 
+  removeBlocks() {
+    console.log('hello there!!!!!');
+    this.container.removeChild(this.blocksContainer);
+    this.blockGrid = [];
+  }
+
   update(timeSinceStart) {
     if(this.timesUp) return;
 
-
     if(timeSinceStart > MAX_SEARCH_TIME) {
+      if(inTraining) return;
       this.timesUp = true;
 
       document.getElementById("add-shape").disabled = true;
@@ -473,10 +533,54 @@ class BlockScene extends util.Entity {
 
   onPointerMove(e) {
     if(!this.draggingBlock) return;
-    if(e.data.pointerId !== this.draggingPointerId) return;
+    if(!buttonControls && (e.data.pointerId !== this.draggingPointerId)) return;
 
 
     this.draggingBlock.position = util.subtract(e.data.getLocalPosition(app.stage), this.blocksContainer.position);
+  }
+
+  pickupBlockUsingButtons() {
+    // This function is similar to the onPointerDown but without the things specific 
+    // for the pointer event.
+    if(this.draggingBlock) return; // Don't allow multiple drags
+    if(this.timesUp) return; // Don't allow drags when time is up
+    if(!this.mouseOverBlock) return;
+
+    this.draggingBlock = this.mouseOverBlock;
+    this.draggingBlockStartGridPosition = pixelPosToGridPos(this.draggingBlock.position);
+    this.startDragTime = Date.now();
+    
+    // TODO there is something wrong with this line
+    this.blocksContainer.setChildIndex(this.draggingBlock, this.blocksContainer.children.length - 1);
+    
+    const gridPos = pixelPosToGridPos(this.draggingBlock.position);
+    this.blockGrid = util.removeFromArray(this.blockGrid, gridPos);
+    this.highlightedBlocks.add(this.draggingBlock);
+
+    document.getElementById("html-layer").className = "no-pointer-events";
+  }
+
+  dropBlockUsingButtons() {
+    // This function is basically the same as the onPointerUp 
+    // but without the parameter e :P
+
+    if(!this.draggingBlock) return;
+
+    this.dropBlock(this.draggingBlock, this.draggingBlock.position);
+
+    this.unhighlightBlock(this.draggingBlock);
+
+    this.draggingBlock = null;
+    this.draggingPointerId = null;
+    this.updateBlocks();
+
+    document.getElementById("add-shape").disabled = false;
+    this.changedShape = true;
+
+    // Re-enable html buttons
+    document.getElementById("html-layer").className = "";
+
+    this.emit("droppedBlock");
   }
 
   onKeyUp(e) {
@@ -485,7 +589,15 @@ class BlockScene extends util.Entity {
       var keyValue = parseInt(e.key);
       if (keyValue == 1 || keyValue == 2) {
         this.onAddShape();
-      }
+      } else if (keyValue == 3 || keyValue == 4) {
+        if (buttonControls) {
+          if (this.draggingBlock) {
+            this.dropBlockUsingButtons();
+          } else {
+            this.pickupBlockUsingButtons();
+          }
+        }
+      } 
     }
   }
 
@@ -614,7 +726,7 @@ class BlockScene extends util.Entity {
         timeSinceLastMouseUp: Date.now() - this.lastMouseUpTime
       }
     });
-
+    document.getElementById("pixi-canvas").focus();
     this.emit("addedShape");
   }
 
@@ -626,6 +738,7 @@ class BlockScene extends util.Entity {
     } else {
       document.getElementById("modal-confirm-done").style.display = "block";
     }
+    document.getElementById("pixi-canvas").focus();
   }
 
   cancelModal() {
@@ -867,13 +980,22 @@ const metricsStartSceneEvents = {
 const searchParams = new URLSearchParams(window.location.search);
 const allowEarlyExit = searchParams.get("allowEarlyExit") !== "false" && searchParams.get("allowEarlyExit") !== "0";
 const showResults = searchParams.get("showResults") !== "false" && searchParams.get("showResults") !== "0";
+const timerValue = searchParams.get("length");
+if (timerValue != null) {
+  MAX_SEARCH_TIME = parseInt(timerValue) * 60 * 1000;
+  document.getElementById("game-length-sentence").innerHTML = `אורך המשחק הוא- ${parseInt(timerValue)}.`
+}
+
+const buttonControls = searchParams.get("buttonControls") === "true";
+console.log(buttonControls);
+
 
 let galleryShapes = [];
 let searchScore = 0.33;
 let redmetricsConnection;
 const defaultStartingScene = "intro";
 let sceneLayer;
-let currentScene;
+let currentScene; 
 let currentSceneName;
 let sceneStartedAt = 0;
 
